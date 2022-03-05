@@ -918,7 +918,8 @@ _Bool __liballocs_delete_all_bigallocs_overlapping_range(const void *begin, cons
 	return 1;
 }
 
-__attribute__((visibility("hidden")))
+// __attribute__((visibility("hidden")))
+// __attribute__((visibility("protected")))
 struct big_allocation *__lookup_bigalloc_under_pageindex(const void *mem, struct allocator *a, void **out_object_start)
 {
 	if (!pageindex) __pageindex_init();
@@ -930,7 +931,8 @@ struct big_allocation *__lookup_bigalloc_under_pageindex(const void *mem, struct
 	return b;
 }
 
-__attribute__((visibility("hidden")))
+// __attribute__((visibility("hidden")))
+// __attribute__((visibility("protected")))
 struct big_allocation *__lookup_bigalloc_under(const void *mem, struct allocator *a, struct big_allocation *start, void **out_object_start)
 {
 	if (!pageindex) __pageindex_init();
@@ -943,7 +945,7 @@ struct big_allocation *__lookup_bigalloc_under(const void *mem, struct allocator
 }
 
 
-__attribute__((visibility("protected")))
+// __attribute__((visibility("protected")))
 struct big_allocation *__lookup_bigalloc_from_root(const void *mem, struct allocator *a, void **out_object_start)
 {
 	if (!pageindex) __pageindex_init();
@@ -976,7 +978,8 @@ struct insert *__lookup_bigalloc_with_insert(const void *mem, struct allocator *
 	}
 }
 
-__attribute__((visibility("hidden")))
+// __attribute__((visibility("hidden")))
+// __attribute__((visibility("protected")))
 struct big_allocation *__lookup_bigalloc_top_level(const void *mem)
 {
 	if (!pageindex) __pageindex_init();

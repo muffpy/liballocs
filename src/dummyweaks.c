@@ -47,7 +47,7 @@ struct __liballocs_memrange_cache __liballocs_ool_cache; // all zeroes
 _Bool __liballocs_is_initialized;
 
 struct big_allocation;
-
+struct allocator __static_file_allocator;
 uint16_t *pageindex __attribute__((visibility("protected")));
 
 __thread void *__current_allocfn;
@@ -248,6 +248,15 @@ struct mapping_entry *__liballocs_get_memory_mapping(const void *obj,
 }
 struct big_allocation *__lookup_bigalloc_from_root(const void *mem, struct allocator *a, void **out_object_start)
 {
+	return NULL;
+}
+struct big_allocation *__lookup_bigalloc_under_pageindex(const void *mem, struct allocator *a, void **out_object_start){
+	return NULL;
+}
+struct big_allocation *__lookup_bigalloc_under(const void *mem, struct allocator *a, struct big_allocation *start, void **out_object_start) {
+	return NULL;
+}
+struct big_allocation *__lookup_bigalloc_top_level(const void *mem) {
 	return NULL;
 }
 Dl_info dladdr_with_cache(const void *addr)
