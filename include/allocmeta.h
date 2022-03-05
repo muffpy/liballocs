@@ -141,14 +141,69 @@ typedef struct lifetime_policy_s
  * Also remember we need to modify this struct so that it encodes a
  * [begin,end) range rather than just a begin offset.
  */
-struct alloc_containment_ctxt
+
+// FIXME: the following, formerly alloc_containment_ctxt, is a more general
+// structure than we thought.
+// There's really a few concepts here:
+// a "pos" (can be used to identify a span i.e. its children),
+// a "link" (way to step down a level, from a given pos)
+// and a "path" (series of links)
+// Also remember that a path need not be a path all the way
+// back to the root.
+// It should be possible to reconstruct the exact object
+// address from a pos,
+// and to turn a link into a pos ("follow" the downward link).
+struct alloc_tree_pos
 {
-	void *container_base;
-	uintptr_t bigalloc_or_uniqtype;
-	unsigned maybe_containee_coord; // where within the container?
-	struct alloc_containment_ctxt *encl;
-	unsigned encl_depth;
+	void *base;           // base addr of the containing alloc
+	uintptr_t bigalloc_or_uniqtype; // container might be a bigalloc or a uniqtype-described alloc
+	// FIXME: this is redundant for bigallocs
+	// FIXME: for uniqtypes we need an 'end' address too,
+	// especially once we make the arrays change.
+	// We can just about fit all three in 128 bits, but not clear this is necessary.
+	// could do the short-alloc union trick, although not clear it would help
+	// since we rarely heap-allocate these things
+	// We could also use the bigalloc *index*, a small integer,
+	// rather than the bigalloc pointer. This is probably worth doing.
+#if 0
+	union {
+		struct {
+			unsigned long _ignore:48;
+			unsigned      is_uniqtype:1;  // to discriminate
+		} which;
+		struct {
+			unsigned long  base:48;
+			unsigned short bigalloc_idx:16; // MSB is always 0
+		} bigalloc;
+		struct {
+			unsigned long base:48;
+			unsigned      always_1:1;  // to discriminate w.r.t. the above -- CHECK bit order
+			unsigned long uniqtype:47; // could be reduced to 44
+			                           // or maybe we want a spinewise compact 32-bit uniqtype id?
+			unsigned      len:32;
+		} uniqtype;
+	   // HMM: how does this compare to our 128-bit pointer-with-bounds type?
+	   // Its first 64 bits are a raw pointer, that can include trap bits
+	   // There is a 32-bit base-of-range field but no type [... i.e. type is 'erased']
+	   // And it only uses 32 bits for the base-of-range
+	   // (relying on a no-cross-4GB-boundary property (or denorm cases).
+	   // They don't quite represent the same thing -- a pointer in the middle of an array
+	   // is in fact more like an alloc_tree_link than an alloc_tree_pos.
+	};
+#endif
 };
+struct alloc_tree_link
+{
+	struct alloc_tree_pos container;
+	unsigned containee_coord; // where within the container?
+};
+struct alloc_tree_path
+{
+	struct alloc_tree_link to_here;
+	unsigned encl_depth;
+	struct alloc_tree_path *encl;
+};
+
 #define BOU_BIGALLOC_NOCHECK_(b_o_u) ((struct big_allocation *) ((b_o_u) & UNIQTYPE_PTR_MASK_NOTFLAGS))
 #define BOU_UNIQTYPE_NOCHECK_(b_o_u) ((struct uniqtype *) ((b_o_u) & UNIQTYPE_PTR_MASK_NOTFLAGS))
 
@@ -159,21 +214,58 @@ struct alloc_containment_ctxt
 	&& ((uintptr_t)BOU_BIGALLOC_NOCHECK_(b_o_u) < (uintptr_t) &big_allocations[NBIGALLOCS]))
 #define BOU_IS_UNIQTYPE(b_o_u) (!BOU_IS_BIGALLOC(b_o_u))
 
-#define CONT_UNIQTYPE_FIELD_NAME(c) ( \
-   ( (BOU_IS_UNIQTYPE((c)->bigalloc_or_uniqtype)) && \
-      UNIQTYPE_IS_COMPOSITE_TYPE(BOU_UNIQTYPE((c)->bigalloc_or_uniqtype))) ? \
+/* Given a containment context, we should be able
+ * to get back various things:
+ * the object pointer,
+ * its type,
+ * and the meaning of its coordinate, e.g. its field name */
+#define LINK_UNIQTYPE_FIELD_NAME(l) ( \
+   ( (BOU_IS_UNIQTYPE((l)->container.bigalloc_or_uniqtype)) && \
+      UNIQTYPE_IS_COMPOSITE_TYPE(BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype))) ? \
       (UNIQTYPE_COMPOSITE_SUBOBJ_NAMES( \
-         BOU_UNIQTYPE((c)->bigalloc_or_uniqtype) \
-      )[(c)->maybe_containee_coord - 1]) : NULL \
+         BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype) \
+      )[(l)->containee_coord - 1]) : NULL \
 )
+#define LINK_UNIQTYPE_FIELD(l) ( \
+ ( (BOU_IS_UNIQTYPE((l)->container.bigalloc_or_uniqtype)) && \
+	UNIQTYPE_IS_COMPOSITE_TYPE(BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype))) ? \
+	(struct uniqtype *)(BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype)->related[(l)->containee_coord - 1].un.memb.ptr) \
+	: NULL \
+)
+#define LINK_UNIQTYPE_ARRAY_ELEMENT(l) ( \
+  ((BOU_IS_UNIQTYPE((l)->container.bigalloc_or_uniqtype)) && \
+    UNIQTYPE_IS_ARRAY_TYPE(BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype))) \
+  ? \
+  (BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype)->related[0].un.memb.ptr) \
+  : NULL \
+)
+#define LINK_LOWER_UNIQTYPE(l) ( \
+  ((BOU_IS_UNIQTYPE((l)->container.bigalloc_or_uniqtype)) ? \
+	(UNIQTYPE_IS_ARRAY_TYPE(BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype))) ? \
+	LINK_UNIQTYPE_ARRAY_ELEMENT(l) : \
+	(UNIQTYPE_IS_COMPOSITE_TYPE(BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype))) ? \
+	 LINK_UNIQTYPE_FIELD(l) \
+	: NULL \
+	: /* FIXME: see below */ NULL) \
+)
+#define LINK_UPPER_UNIQTYPE(l) ( \
+   (BOU_IS_UNIQTYPE((l)->container.bigalloc_or_uniqtype)) ? \
+	BOU_UNIQTYPE((l)->container.bigalloc_or_uniqtype) \
+	: NULL \
+  )
+
+/* PROBLEM: What about if our obj is a top-level allocation, so lies within a bigalloc
+ * but has no *enclosing* uniqtype? I guess we can call the allocator's get_type, since
+ * we have the bigalloc and can use its suballocator (which we know exists).
+ * We can possibly use the 'coord' field as short-cut to the type, but unclear. */
 
 struct interpreter
 {
 	const char *name;
-	_Bool (*can_interp)(void *, struct uniqtype *, struct alloc_containment_ctxt *);
-	void *(*do_interp) (void *, struct uniqtype *, struct alloc_containment_ctxt *);
-	_Bool (*may_contain)(void *, struct uniqtype *, struct alloc_containment_ctxt *);
-	uintptr_t (*is_environ)(void *, struct uniqtype *, struct alloc_containment_ctxt *);
+	intptr_t (*can_interp)(void *, struct uniqtype *, struct alloc_tree_link *);
+	void *(*do_interp) (void *, struct uniqtype *, struct alloc_tree_link *, intptr_t how);
+	_Bool (*may_contain)(void *, struct uniqtype *, struct alloc_tree_link *);
+	uintptr_t (*is_environ)(void *, struct uniqtype *, struct alloc_tree_link *);
 };
 /* Recall: a name resolver is an interpreter of naming languages, which are
  * distinguished from computational languages only by the computational
@@ -214,18 +306,27 @@ fun(void,                    register_suballoc,arg(struct allocated_chunk *,star
  * the refactoring to take these arguments consistently.
  * NOTE that maybe_the_allocation args might not be going far
  * enough... do we want maybe_the_allocation_or_arena? */
-typedef int walk_alloc_cb_t(struct big_allocation *maybe_the_allocation, void *obj, struct uniqtype *t, const void *allocsite, struct alloc_containment_ctxt *cont, void *arg);
-
+typedef int walk_alloc_cb_t(struct big_allocation *maybe_the_allocation, void *obj,
+   struct uniqtype *t, const void *allocsite, struct alloc_tree_link *link_to_here, void *arg);
+/* An 'imposed child bigalloc' is a child c of bigalloc b
+ * where c is not allocated_by the suballocator of b.
+ * In other words, te allocator that is nominally managing
+ * the space knows nothing about this particular occupant.
+ * One example is how the initial stack is imposed on the auxv,
+ * which knows nothing about it. There are few or no other
+ * examples as yet, but it seems worth retaining this case.
+ * (We needed this wacky stack/auxv case because the two can
+ * share the same page of memory, and we have an invariant that
+ * memory-mapping-sequence bigallocs are page-aligned.) */
 enum
 {
-	ALLOC_WALK_CHILD_BIGALLOCS = 0x1,
-	ALLOC_WALK_SUBALLOCS       = 0x2
+	ALLOC_WALK_BIGALLOC_IMPOSED_CHILDREN = 0x1
 };
 #define ALLOC_REFLECTIVE_API(fun, arg) \
 fun(struct uniqtype *  ,get_type,      arg(void *, obj)) /* what type? */ \
 fun(void *             ,get_base,      arg(void *, obj))  /* base address? */ \
 fun(unsigned long      ,get_size,      arg(void *, obj))  /* size? */ \
-fun(const char *       ,get_name,      arg(void *, obj))  /* name? */ \
+fun(const char *       ,get_name,      arg(void *, obj), arg(char *, namebuf), arg(size_t, buflen))  /* name? */ \
 fun(const void *       ,get_site,      arg(void *, obj))  /* where allocated?   optional   */ \
 fun(liballocs_err_t    ,get_info,      arg(void *, obj), arg(struct big_allocation *, maybe_alloc), arg(struct uniqtype **,out_type), arg(void **,out_base), arg(unsigned long*,out_size), arg(const void**, out_site)) \
 fun(struct big_allocation *,ensure_big,arg(void *, obj)) \
@@ -236,7 +337,7 @@ fun(_Bool              ,can_issue,     arg(void *, obj), arg(off_t, off)) \
 fun(size_t             ,raw_metadata,  arg(struct allocated_chunk *,start),arg(struct alloc_metadata **, buf)) \
 fun(liballocs_err_t    ,set_type,      arg(struct big_allocation *, maybe_the_allocation), arg(void *, obj), arg(struct uniqtype *,new_t)) /* optional (stack) */\
 fun(liballocs_err_t    ,set_site,      arg(struct big_allocation *, maybe_the_allocation), arg(void *, obj), arg(struct uniqtype *,new_t)) /* optional (stack) */\
-fun(int                ,walk_allocations, arg(struct alloc_containment_ctxt *,cont), arg(walk_alloc_cb_t *, cb), arg(void *, arg))
+fun(int                ,walk_allocations, arg(struct alloc_tree_pos *,cont), arg(walk_alloc_cb_t *, cb), arg(void *, arg), arg(void *, begin), arg(void *, end))
 
 #define __allocmeta_fun_arg(argt, name) argt
 #define __allocmeta_fun_ptr(rett, name, ...) \
@@ -254,19 +355,18 @@ struct allocator
 
 /* Declare the top-level functions. FIXME: many of these are not defined
  * anywhere. FIXME: do we want to use 'protected' to make the __liballocs_-
- * prefixed ones non-overridable for internal calls? */
+ * prefixed ones non-overridable for internal calls? Beware protected undefs,
+ * which will prevent binding from outside-of-DSO clients... use IN_LIBALLOCS_DSO. */
 #define __liballocs_toplevel_fun_decl(rett, name, ...) \
 	rett __liballocs_ ## name( __VA_ARGS__ ); \
 	rett alloc_ ## name( __VA_ARGS__ );
 ALLOC_REFLECTIVE_API(__liballocs_toplevel_fun_decl, __allocmeta_fun_arg)
 
-/* other top-level functions */
-
 // we use walk_allocations to write a general cross-allocator depth-first traversal
 /* Depth-first walking necessarily crosses allocators, so it
  * doesn't need to go on the allocator. */
 int __liballocs_walk_allocations_df(
-	struct alloc_containment_ctxt *cont,
+	struct alloc_tree_pos *pos,
 	walk_alloc_cb_t *cb,
 	void *arg
 );
@@ -276,12 +376,13 @@ struct walk_refs_state
 {
 	struct interpreter *interp;
 	walk_alloc_cb_t *ref_cb;
+	intptr_t seen_how;
 	//void *ref_cb_arg;
 };
 int
 __liballocs_walk_refs_cb(struct big_allocation *maybe_the_allocation,
 	void *obj, struct uniqtype *t, const void *allocsite,
-	struct alloc_containment_ctxt *cont, void *walk_refs_state_as_void);
+	struct alloc_tree_link *link_to_here, void *walk_refs_state_as_void);
 
 /* We use our general cross-allocator depth-first traversal to write an environment walker,
  * parameterised by an interpreter (i.e. many notions of 'environment', to serve the
@@ -313,7 +414,7 @@ struct environ_elt_cb_arg
 int
 __liballocs_walk_environ_cb(struct big_allocation *maybe_the_allocation,
 	void *obj, struct uniqtype *t, const void *allocsite,
-	struct alloc_containment_ctxt *cont, void * /* YES */ walk_environ_state_as_void);
+	struct alloc_tree_link *link_to_here, void * /* YES */ walk_environ_state_as_void);
 
 // we can also ask for the allocator
 struct allocator *alloc_get_allocator(void *obj);
@@ -323,13 +424,14 @@ void *__liballocs_get_alloc_base(void *); /* alias of __liballocs_get_base */
 extern struct allocator __stack_allocator;
 extern struct allocator __stackframe_allocator;
 extern struct allocator __mmap_allocator; /* mmaps */
-extern struct allocator __sbrk_allocator; /* sbrk() */
+extern struct allocator __brk_allocator; /* sbrk() */
 extern struct allocator __static_file_allocator;
 extern struct allocator __static_segment_allocator;
 extern struct allocator __static_section_allocator;
 extern struct allocator __static_symbol_allocator;
 extern struct allocator __auxv_allocator; /* nests under stack? */
 extern struct allocator __alloca_allocator; /* nests under stack? */
+extern struct allocator __packed_seq_allocator;
 // FIXME: These are indexes, not allocators
 extern struct allocator __generic_malloc_allocator; /* covers all chunks */
 extern struct allocator __generic_small_allocator; /* usual suballoc impl */
@@ -366,12 +468,14 @@ struct file_metadata *__static_file_allocator_notify_load(void *handle, const vo
 void __static_file_allocator_notify_unload(const char *copied_filename);
 
 void __brk_allocator_notify_brk(void *new_curbrk, const void *caller) __attribute__((visibility("hidden")));
-void __brk_allocator_init(void) __attribute__((visibility("hidden"),constructor(101)));
+void __brk_allocator_init(void) __attribute__((visibility("hidden"),constructor(102)));
 extern struct big_allocation *__brk_bigalloc __attribute__((visibility("hidden")));
 _Bool __brk_allocator_notify_unindexed_address(const void *mem);
 
 typedef unsigned short allocsite_id_t;
 struct allocsites_vectors_by_base_id_entry; // opaque here
+
+const char *__liballocs_meta_libfile_name(const char *objname);
 
 struct allocs_file_metadata
 {
@@ -444,6 +548,30 @@ _Bool __auxv_get_argv(const char ***out_start, const char ***out_terminator, str
 _Bool __auxv_get_env(const char ***out_start, const char ***out_terminator, struct uniqtype **out_uniqtype);
 _Bool __auxv_get_auxv(const Elf64_auxv_t **out_start, Elf64_auxv_t **out_terminator, struct uniqtype **out_uniqtype);
 void *__auxv_get_program_entry_point(void);
+
+struct packed_sequence_family;
+struct packed_sequence
+{
+	struct packed_sequence_family *fam;
+	void *enumerate_fn_arg;
+	void *name_fn_arg;
+	/* We cache, lazily, up to a given offset. The metavector
+	 * and starts bitmap are good up to exactly that offset.
+	 * We can realloc them if we need to enlarge the range. */
+	union {
+		void *metavector_any; /* for generic access */
+		struct packed_sequence_metavector_rec16 *metavector_16;
+		struct packed_sequence_metavector_rec32 *metavector_32;
+	} un;
+	unsigned metavector_nused;
+	unsigned metavector_size;
+	bitmap_word_t *starts_bitmap;
+	unsigned starts_bitmap_nwords;
+	// unsigned length_in_bytes; // do we need this? implied by container?
+	unsigned offset_cached_up_to; // always the *end* offset of the last one we have cached
+};
+extern struct packed_sequence_family __string8_nulterm_packed_sequence;
+void __packed_seq_free(void *arg);
 
 /* Assorted notes:
  * - core liballocs implements the reflective protocol 

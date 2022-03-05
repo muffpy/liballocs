@@ -181,6 +181,8 @@ struct allocator __generic_malloc_allocator; /* covers all chunks */
 struct allocator __generic_small_allocator; /* usual suballoc impl */
 struct allocator __generic_uniform_allocator; /* usual suballoc impl */
 struct allocator __generic_malloc_allocator;
+struct allocator __packed_seq_allocator;
+struct packed_sequence_family { long pad[10]; } __string8_nulterm_packed_sequence; // HACK
 
 struct liballocs_err *__liballocs_get_alloc_info(const void *obj, 
 	struct allocator **out_allocator, const void **out_alloc_start,
@@ -237,7 +239,8 @@ int __liballocs_add_type_to_block(void *block, struct uniqtype *t)
 	return 0;
 }
 struct big_allocation *__liballocs_new_bigalloc(const void *ptr, size_t size,
-		struct meta_info meta, struct big_allocation *maybe_parent, struct allocator *a)
+		void *suballocator_private, void (*suballocator_private_free)(void*),
+		struct big_allocation *maybe_parent, struct allocator *a)
 {
 	return NULL;
 }
@@ -259,16 +262,25 @@ struct big_allocation *__lookup_bigalloc_under(const void *mem, struct allocator
 struct big_allocation *__lookup_bigalloc_top_level(const void *mem) {
 	return NULL;
 }
-Dl_info dladdr_with_cache(const void *addr)
-{
-	Dl_info dummy;
-	memset(&dummy, 0, sizeof dummy);
-	return dummy;
-}
-struct alloc_containment_ctxt;
-typedef int walk_alloc_cb_t(struct big_allocation *maybe_the_allocation, void *obj, struct uniqtype *t, const void *allocsite, struct alloc_containment_ctxt *cont, void *arg);
+
+struct alloc_tree_pos;
+struct alloc_tree_link;
+typedef int walk_alloc_cb_t(struct big_allocation *maybe_the_allocation, void *obj, struct uniqtype *t, const void *allocsite, struct alloc_tree_link *cont, void *arg);
+int
+__liballocs_walk_allocations(struct alloc_tree_pos *cont,
+	walk_alloc_cb_t *cb,
+	void *arg,
+	void *maybe_range_begin,
+	void *maybe_range_end) { return 0; }
+int
+alloc_walk_allocations(struct alloc_tree_pos *cont,
+	walk_alloc_cb_t *cb,
+	void *arg,
+	void *maybe_range_begin,
+	void *maybe_range_end) __attribute__((alias("__liballocs_walk_allocations")));
+
 int __liballocs_walk_allocations_df(
-	struct alloc_containment_ctxt *cont,
+	struct alloc_tree_pos *pos,
 	walk_alloc_cb_t *cb,
 	void *arg
 )
@@ -279,7 +291,7 @@ struct walk_refs_state;
 int
 __liballocs_walk_refs_cb(struct big_allocation *maybe_the_allocation,
 	void *obj, struct uniqtype *t, const void *allocsite,
-	struct alloc_containment_ctxt *cont, void *walk_refs_state_as_void)
+	struct alloc_tree_link *cont, void *walk_refs_state_as_void)
 {
 	return 0;
 }
@@ -287,7 +299,7 @@ struct walk_environ_state;
 int
 __liballocs_walk_environ_cb(struct big_allocation *maybe_the_allocation,
 	void *obj, struct uniqtype *t, const void *allocsite,
-	struct alloc_containment_ctxt *cont, void * /* YES */ walk_environ_state_as_void)
+	struct alloc_tree_link *cont, void * /* YES */ walk_environ_state_as_void)
 {
 	return 0;
 }
@@ -327,6 +339,7 @@ void __notify_copy(void *dest, const void *src, unsigned long n)
 	 * Also note that in any case, libcrunch will wrap us. */
 }
 
+const char *__liballocs_meta_libfile_name(const char *objname) { return NULL; }
 
 /* GIANT HACK:
  * This is in this file because:
@@ -359,6 +372,8 @@ char *__liballocs_private_strndup(const char *s, size_t n)
 }
 char *__private_strndup(const char *s, size_t n) __attribute__((weak,alias("__liballocs_private_strndup")));
 
+void __packed_seq_free(void *arg) {}
+
 // FIXME: these are just pasted, and that is just wrong.
 // See GitHub issue #56 for possible ways to get rid of all this.
 struct liballocs_err
@@ -375,6 +390,8 @@ struct liballocs_err __liballocs_err_unknown_stack_walk_problem
  = { "unknown stack walk problem" };
 struct liballocs_err __liballocs_err_unindexed_heap_object
  = { "unindexed heap object" };
+struct liballocs_err __liballocs_err_unindexed_alloca_object
+ = { "unindexed alloca object" };
 struct liballocs_err __liballocs_err_unrecognised_alloc_site
  = { "unrecognised alloc site" };
 struct liballocs_err __liballocs_err_unrecognised_static_object

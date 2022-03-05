@@ -64,15 +64,8 @@ static struct big_allocation *add_bigalloc(void *begin, size_t size)
 	struct big_allocation *b = __liballocs_new_bigalloc(
 		begin,
 		size,
-		(struct meta_info) {
-			.what = DATA_PTR,
-			.un = {
-				opaque_data: {
-					.data_ptr = NULL, // placeholder
-					.free_func = NULL
-				}
-			}
-		},
+		NULL /* allocator_private */,
+		NULL /* allocator_private_free */,
 		NULL,
 		&__mmap_allocator
 	);
@@ -106,15 +99,8 @@ static struct big_allocation *add_mapping_sequence_bigalloc(struct mapping_seque
 	struct mapping_sequence *copy = __private_malloc(sizeof (struct mapping_sequence));
 	if (!copy) abort();
 	memcpy(copy, seq, sizeof (struct mapping_sequence));
-	b->meta = (struct meta_info) {
-		.what = DATA_PTR,
-		.un = {
-			opaque_data: {
-				.data_ptr = copy,
-				.free_func = __private_free
-			}
-		}
-	};
+	b->allocator_private = copy;
+	b->allocator_private_free = __private_free;
 	return b;
 }
 
@@ -131,15 +117,9 @@ static struct big_allocation *add_mapping_sequence_bigalloc_nomalloc(struct mapp
 	if (!copy) abort();
 	memcpy(copy, seq, sizeof (struct mapping_sequence));
 
-	b->meta = (struct meta_info) {
-		.what = DATA_PTR,
-		.un = {
-			opaque_data: {
-				.data_ptr = copy,
-				.free_func = __private_free
-			}
-		}
-	};
+	b->allocator_private = copy;
+	b->allocator_private_free = __private_free;
+
 	return b;
 }
 
@@ -233,8 +213,7 @@ void add_mapping_sequence_bigalloc_if_absent(struct mapping_sequence *seq)
 		 * existed before the prefix was created. If we identify that
 		 * this is occurring, we simply delete the overlap from the new
 		 * sequence and then continue. */
-		existing_seq = (struct mapping_sequence *)
-			parent_end->meta.un.opaque_data.data_ptr;
+		existing_seq = (struct mapping_sequence *) parent_end->allocator_private;
 		if (!existing_seq)
 		{
 			/* The parent end has a bigalloc but no mapping sequence. HMM. */
@@ -292,11 +271,11 @@ void add_mapping_sequence_bigalloc_if_absent(struct mapping_sequence *seq)
 		/* If we've been given a mapping sequence of which parent_begin's
 		 * is a suffix, then extend parent_begin to cover the new end
 		 * and copy the new mapping sequence in. */
-		if (mapping_sequence_prefix((struct mapping_sequence *) parent_begin->meta.un.opaque_data.data_ptr,
+		if (mapping_sequence_prefix((struct mapping_sequence *) parent_begin->allocator_private,
 			seq))
 		{
 			__liballocs_extend_bigalloc(parent_begin, seq->end);
-			memcpy(parent_begin->meta.un.opaque_data.data_ptr,
+			memcpy(parent_begin->allocator_private,
 				seq, sizeof *seq);
 			return;
 		}
@@ -312,7 +291,7 @@ void add_mapping_sequence_bigalloc_if_absent(struct mapping_sequence *seq)
 		 * so delegate to it if possible. */
 		/* A mapping exists and overlaps a unique existing one. If it's an
 		 * exact match, we can simply return. */
-		existing_seq = (struct mapping_sequence *) parent_begin->meta.un.opaque_data.data_ptr;
+		existing_seq = (struct mapping_sequence *) parent_begin->allocator_private;
 		if (mapping_sequence_suffix(existing_seq, seq) && mapping_sequence_suffix(seq, existing_seq))
 		{
 			return;
@@ -567,7 +546,7 @@ static void do_munmap(void *addr, size_t length, void *caller)
 			remaining_length -= PAGE_SIZE;
 			continue; // FIXME: use wide-character string funcs instead
 		}
-		struct mapping_sequence *seq = b->meta.un.opaque_data.data_ptr;
+		struct mapping_sequence *seq = b->allocator_private;
 		
 		/* Are we pre-truncating, post-truncating, splitting or wholesale deleting? */
 		assert(cur >= (char*) b->begin);
@@ -617,14 +596,14 @@ static void do_munmap(void *addr, size_t length, void *caller)
 				__liballocs_truncate_bigalloc_at_end(b, addr);
 				/* Now the bigallocs are in the right place, but their metadata is wrong. */
 				struct mapping_sequence *new_seq = __private_malloc(sizeof (struct mapping_sequence));
-				struct mapping_sequence *orig_seq = b->meta.un.opaque_data.data_ptr;
+				struct mapping_sequence *orig_seq = b->allocator_private;
 				memcpy(new_seq, orig_seq, sizeof (struct mapping_sequence));
 				/* From the first, delete from the hole all the way. */
 				delete_mapping_sequence_span(orig_seq, addr, (char*) old_end - (char*) addr);
 				/* From the second, delete from the old begin to the end of the hole. */
 				delete_mapping_sequence_span(new_seq, b->begin, 
 						((char*) addr + length) - (char*) b->begin);
-				second_half->meta.un.opaque_data.data_ptr = new_seq;
+				second_half->allocator_private = new_seq;
 				/* same free function as before */
 			}
 		}
@@ -670,7 +649,7 @@ void __mmap_allocator_notify_mremap_before(void *old_addr, size_t old_size, size
 	struct big_allocation *bigalloc_before = __lookup_bigalloc_from_root(old_addr,
 		&__mmap_allocator, NULL);
 	if (!bigalloc_before) abort();
-	struct mapping_sequence *seq = bigalloc_before->meta.un.opaque_data.data_ptr;
+	struct mapping_sequence *seq = bigalloc_before->allocator_private;
 	if (!seq)
 	{
 		/* It's a chunk malloc'd by our own dlmalloc. HMM. */
@@ -749,7 +728,7 @@ static void do_mmap(void *mapped_addr, void *requested_addr, size_t requested_le
 		{
 			/* See if we can extend it. */
 			struct mapping_sequence *seq = (struct mapping_sequence *) 
-				bigalloc_before->meta.un.opaque_data.data_ptr;
+				bigalloc_before->allocator_private;
 			_Bool success = augment_sequence(seq, mapped_addr, (char*) mapped_addr + mapped_length, 
 				prot, flags, offset, filename, caller);
 			char *requested_new_end = (char*) mapped_addr + mapped_length;
@@ -800,7 +779,12 @@ void __mmap_allocator_notify_mprotect(void *addr, size_t len, int prot)
 }
 
 static int add_missing_cb(struct maps_entry *ent, char *linebuf, void *arg);
-void add_missing_mappings_from_proc(void)
+struct add_missing_cb_args
+{
+	struct mapping_sequence *seq;
+	void *end_addr;
+};
+void add_missing_mappings_from_proc(void *executable_end_addr)
 {
 	struct maps_entry entry;
 
@@ -819,7 +803,12 @@ void add_missing_mappings_from_proc(void)
 	struct mapping_sequence current = {
 		.begin = NULL
 	};
-	for_each_maps_entry(fd, get_a_line_from_maps_fd, linebuf, sizeof linebuf, &entry, add_missing_cb, &current);
+	struct add_missing_cb_args args = {
+		.seq = &current,
+		.end_addr = executable_end_addr
+	};
+	for_each_maps_entry(fd, get_a_line_from_maps_fd, linebuf, sizeof linebuf, &entry,
+		add_missing_cb, &args);
 	/* Finish off the last mapping. */
 	if (current.nused > 0) add_mapping_sequence_bigalloc_if_absent(&current);
 
@@ -921,6 +910,7 @@ void ( __attribute__((constructor(101))) __mmap_allocator_init)(void)
 				break;
 			}
 		}
+		// this is just used for detecting and filling holes, opportunistically
 		uintptr_t last_seen_end_vaddr_rounded_up = (uintptr_t) -1;
 		for (int i = 0; i < phnum_auxv->a_un.a_val; ++i)
 		{
@@ -930,8 +920,8 @@ void ( __attribute__((constructor(101))) __mmap_allocator_init)(void)
 				/* Kernel's treatment of extra-memsz is not reliable -- i.e. the 
 				 * memsz bit needn't show up in /proc/<pid>/maps -- so use the
 				 * beginning. */
-				uintptr_t end = executable_load_addr + 
-					(uintptr_t) phdr->p_vaddr + phdr->p_memsz;
+				uintptr_t end = ROUND_UP(executable_load_addr + 
+					(uintptr_t) phdr->p_vaddr + phdr->p_memsz, PAGE_SIZE);
 				if (end > biggest_end_seen)
 				{
 					biggest_end_seen = end;
@@ -988,22 +978,21 @@ void ( __attribute__((constructor(101))) __mmap_allocator_init)(void)
 		 * because we're not trapping sbrk() yet. We need the bigalloc lookup
 		 * (in the indexing logic, or in pageindex) to have a second-attempt
 		 * at getting the bigalloc after re-checking the sbrk(). */
-		add_missing_mappings_from_proc();
+		add_missing_mappings_from_proc(executable_end_addr);
 		/* Also extend the data segment to account for the current brk. */
 		set_executable_mapping_bigalloc(executable_end_addr);
+		/* brk allocator init can initialize even before systrap -- we
+		 * need to worry about out-of-date __curbrk manually, though. */
+		__brk_allocator_init();
 		/* Before we ask libsystrap to do anything, ensure the file metadata
 		 * for the early libs is in place. This will skip the meta-objects,
 		 * which we're not ready to do yet (it's a dlopen/mmap that we want
 		 * to trap). */
 		__runt_files_init();
 		assert(early_lib_handles[0]);
-		/* We need to have generic malloc init'd by now, because we always
-		 * need to have allocated our memtables before we start getting
-		 * mmap traps. This is only important for the test lib... ordinary
-		 * builds will be preloaded, so will always hit our mmap not libc's. */
-		__generic_malloc_allocator_init();
 		/* Now we're ready to take traps for subsequent mmaps and sbrk. */
 		__liballocs_systrap_init();
+		__brk_allocator_notify_brk(sbrk(0), __builtin_return_address(0));
 		/* Now we can dlopen the meta-objects for the early libs, which librunt
 		 * skipped because it couldn't catch the mmaps happening during dlopen. */
 		load_meta_objects_for_early_libs();
@@ -1380,10 +1369,11 @@ static _Bool extend_current(struct mapping_sequence *cur, struct maps_entry *ent
 				filename, NULL);
 };
 
-static int add_missing_cb(struct maps_entry *ent, char *linebuf, void *arg)
+static int add_missing_cb(struct maps_entry *ent, char *linebuf, void *args_as_void)
 {
 	unsigned long size = ent->second - ent->first;
-	struct mapping_sequence *cur = (struct mapping_sequence *) arg;
+	struct add_missing_cb_args *args = (struct add_missing_cb_args *) args_as_void;
+	struct mapping_sequence *cur = args->seq;
 	
 	// if this mapping looks like a memtable, we skip it
 	if (size > BIGGEST_SANE_USER_ALLOC) return 0; // keep going
@@ -1401,17 +1391,32 @@ static int add_missing_cb(struct maps_entry *ent, char *linebuf, void *arg)
 	 * add_mapping_sequence_bigalloc_if_absent reconcile any discrepancies
 	 * with what already exists.
 	 */
+	void *obj = (void *)(uintptr_t) ent->first;
+	void *obj_lastbyte __attribute__((unused)) = (void *)((uintptr_t) ent->second - 1);
+	struct maps_entry fake_ent;
 
 	if (0 == strncmp(ent->rest, "[heap", 5)) // it might say '[heap]'; treat it as heap
 	{
 		/* We will get this when we do the sbrk. Do nothing for now. */
-		return 0;
+		/* PROBLEM: Linux sometimes says '[heap]' when actually some or all
+		 * of the mapping is bss from the executable. This messes us up because
+		 * static_file_allocator wants there to be a mapping_entry for the
+		 * highest vaddr in the file, which could be the end of bss. */
+		if ((uintptr_t) obj < (uintptr_t) args->end_addr)
+		{
+			/* This mapping is actually partly bss. Fake up an entry
+			 * that covers just the bss. */
+			debug_printf(1, "Linux says [heap] but we think it's partly BSS\n");
+			memcpy(&fake_ent, ent, sizeof *ent);
+			fake_ent.rest[0] = '\0';
+			fake_ent.second = (uintptr_t) args->end_addr;
+			ent = &fake_ent;
+			obj_lastbyte = args->end_addr;
+		}
+		else return 0;
 	}
 
 	// ... but if we do, and it's not square-bracketed and nonzero-sizes, it's a mapping
-	void *obj = (void *)(uintptr_t) ent->first;
-	void *obj_lastbyte __attribute__((unused)) = (void *)((uintptr_t) ent->second - 1);
-
 	_Bool extended = extend_current(cur, ent);
 	if (!extended)
 	{
@@ -1426,15 +1431,12 @@ static int add_missing_cb(struct maps_entry *ent, char *linebuf, void *arg)
 
 void __mmap_allocator_notify_brk(void *new_curbrk)
 {
-	if (!initialized)
-	{
-		/* HMM. This is called in a signal context so it's probably not 
-		 * safe to just do the init now. But we don't start taking traps until
-		 * we're initialized, so that's okay. BUT see the note in 
-		 * __mmap_allocator_init... before we're initialized, we need
-		 * another mechanism to probe for brk updates. */
-		return;
-	}
+	/* HMM. If we are called in a signal context sit's probably not 
+	 * safe to just do the init now. But we don't start taking traps until
+	 * we're initialized, so that's okay. BUT see the note in 
+	 * __mmap_allocator_init... before we're initialized, we need
+	 * another mechanism to probe for brk updates. */
+
 	/* If we haven't made the bigalloc yet, sbrk needs no action.
 	 * Otherwise we must update the end. */
 	if (executable_mapping_bigalloc)
@@ -1444,7 +1446,7 @@ void __mmap_allocator_notify_brk(void *new_curbrk)
 		__adjust_bigalloc_end(executable_mapping_bigalloc,
 			new_end);
 		struct mapping_sequence *seq
-		 = executable_mapping_bigalloc->meta.un.opaque_data.data_ptr;
+		 = executable_mapping_bigalloc->allocator_private;
 		seq->end = new_end;
 		/* If we've expanded... */
 		if ((uintptr_t) new_end > (uintptr_t) old_end)
@@ -1472,7 +1474,7 @@ void __mmap_allocator_notify_brk(void *new_curbrk)
 		else if ((uintptr_t) new_end < (uintptr_t) old_end)
 		{
 			struct mapping_sequence *seq
-			 = executable_mapping_bigalloc->meta.un.opaque_data.data_ptr;
+			 = executable_mapping_bigalloc->allocator_private;
 			delete_mapping_sequence_span(seq, new_end, (uintptr_t) old_end - (uintptr_t) new_end);
 			check_mapping_sequence_sanity(seq);
 		}
@@ -1495,7 +1497,7 @@ static liballocs_err_t get_info(void *obj, struct big_allocation *b,
 	if (out_type) *out_type = NULL;
 	if (out_base) *out_base = b->begin;
 	if (out_size) *out_size = (char*) b->end - (char*) b->begin;
-	if (out_site) *out_site = ((struct mapping_sequence *) b->meta.un.opaque_data.data_ptr)->
+	if (out_site) *out_site = ((struct mapping_sequence *) b->allocator_private)->
 		mappings[0].caller; // bit of a HACK: just use the first one in the seq
 	
 	// success

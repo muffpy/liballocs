@@ -159,15 +159,8 @@ struct big_allocation *__stackframe_allocator_find_or_create_bigalloc(
 	struct big_allocation *b = __liballocs_new_bigalloc(
 		begin,
 		(char*) end - (char*) begin,
-		(struct meta_info) {
-			.what = DATA_PTR,
-			.un = {
-				opaque_data: { 
-					.data_ptr = NULL,
-					.free_func = NULL
-				}
-			}
-		},
+		NULL, /* allocator_private */
+		NULL, /* allocator_private_free */
 		NULL, // filled in for us
 		&__stackframe_allocator
 	);
@@ -338,14 +331,7 @@ static liballocs_err_t get_info(void *obj, struct big_allocation *b,
 		// is still higher than our object's addr, we must have gone past it
 		if (frame_allocation_base > (unsigned char *) obj)
 		{
-			struct insert *heap_info = lookup_object_info(obj, (void**) out_base, 
-				out_size, NULL);
-			if (heap_info)
-			{
-				/* It looks like this is an alloca chunk, so proceed. */
-				// goto do_alloca_as_if_heap; // FIXME: reinstate alloca handling
-			}
-
+			/* Probably an alloca chunk, but we shouldn't have been called. */
 			err = &__liballocs_err_stack_walk_reached_higher_frame;
 			goto abort_stack;
 		}
@@ -392,7 +378,7 @@ pc_to_frame_uniqtype(const void *addr)
 	if (!file_b) goto fail;
 	/* Now get its frame info. */
 	struct allocs_file_metadata *afile
-	 = (struct allocs_file_metadata *) file_b->meta.un.opaque_data.data_ptr;
+	 = (struct allocs_file_metadata *) file_b->allocator_private;
 	assert(afile);
 	if (!afile->frames_info) goto fail;
 	uintptr_t target_vaddr = (uintptr_t) addr - afile->m.l->l_addr;

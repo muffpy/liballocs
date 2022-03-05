@@ -41,30 +41,6 @@ struct insert
  * for every possible leaf allocator.
  */
 
-/* Each big allocation has some metadata attached. The meaning of 
- * "insert" is down to the individual allocator. */
-struct meta_info
-{
-	enum meta_info_kind { DATA_PTR, INS_AND_BITS } what;
-	union
-	{
-		struct
-		{
-			void *data_ptr;
-			void (*free_func)(void*);
-		} opaque_data;
-		struct 
-		{
-			struct insert ins;
-			/* FIXME: document what these fields are for. I think it's when we 
-			 * push malloc chunks' metadata down into the bigalloc metadata. */
-			/*unsigned is_object_start:1;
-			unsigned npages:20;
-			unsigned obj_offset:7;*/
-		} ins_and_bits;
-	} un;
-};
-
 /* A "big allocation" is one that 
  * is suballocated from, or
  * spans at least BIG_ALLOC_THRESHOLD bytes of page-aligned memory. */
@@ -81,7 +57,8 @@ struct big_allocation
 	struct big_allocation *first_child;
 	struct allocator *allocated_by; // should always be parent->suballocator *if* parent has a suballocator -- but it needn't, because suballocation is about small stuff
 	struct allocator *suballocator; // ... suballocated bigallocs may have BOTH small and big children
-	struct meta_info meta;          // metadata for use by the `allocated_by' allocator
+	void *allocator_private;        // metadata for use by the `allocated_by' allocator
+	void (*allocator_private_free)(void*);
 	void *suballocator_private;     // metadata for use by the suballocator, if any -- generic_small uses this to hold its chunk_rec
 	void (*suballocator_private_free)(void*);
 	/* Contemplating adding some common suballocator helpers -- if
@@ -122,7 +99,9 @@ enum object_memory_kind __liballocs_get_memory_kind(const void *obj) __attribute
 void __liballocs_print_l0_to_stream_err(void);
 void __liballocs_report_wild_address(const void *ptr); //__attribute__((visibility("protected")));
 
-struct big_allocation *__liballocs_new_bigalloc(const void *ptr, size_t size, struct meta_info meta, struct big_allocation *maybe_parent, struct allocator *a);
+struct big_allocation *__liballocs_new_bigalloc(const void *ptr, size_t size,
+	void *allocator_private, void (*allocator_private_free)(void*),
+	struct big_allocation *maybe_parent, struct allocator *a);
 
 _Bool __liballocs_delete_bigalloc_at(const void *begin, struct allocator *a) __attribute__((visibility("hidden")));
 _Bool __liballocs_extend_bigalloc(struct big_allocation *b, const void *new_end);
@@ -136,12 +115,11 @@ _Bool __liballocs_delete_all_bigallocs_overlapping_range(const void *begin, cons
 struct big_allocation * __liballocs_find_common_parent_bigalloc(const void *ptr, const void *end);
 struct big_allocation *__lookup_bigalloc_under_pageindex(const void *mem, struct allocator *a, void **out_object_start);
 struct big_allocation *__lookup_bigalloc_under(const void *mem, struct allocator *a, struct big_allocation *start, void **out_object_start);
+struct big_allocation *__lookup_bigalloc_under_by_suballocator(const void *mem, struct allocator *sub_a, struct big_allocation *start, void **out_object_start) __attribute__((visibility("hidden")));
 struct big_allocation *__lookup_bigalloc_from_root(const void *mem, struct allocator *a, void **out_object_start);
+struct big_allocation *__lookup_bigalloc_from_root_by_suballocator(const void *mem, struct allocator *sub_a, void **out_object_start);
 struct big_allocation *__lookup_bigalloc_top_level(const void *mem);
 struct big_allocation *__lookup_deepest_bigalloc(const void *mem) __attribute__((visibility("hidden")));
-
-// FIXME: this should go away
-struct insert *__lookup_bigalloc_with_insert(const void *mem, struct allocator *a, void **out_object_start) __attribute__((visibility("hidden")));
 
 struct allocator *__liballocs_get_allocator_upper_bound(const void *obj) __attribute__((visibility("protected")));
 struct allocator *__liballocs_ool_get_allocator(const void *obj) __attribute__((visibility("protected")));
@@ -172,6 +150,23 @@ inline struct big_allocation *__liballocs_get_bigalloc_containing(const void *ob
 	if (bigalloc_num == 0) return NULL;
 	struct big_allocation *b = &__liballocs_big_allocations[bigalloc_num];
 	return b;
+}
+
+/* If we know enough about the bigallocs, we can infer what the allocator
+ * is. */
+static inline
+struct allocator *
+__liballocs_infer_allocator(void *obj, struct big_allocation *maybe_the_allocation,
+	struct big_allocation *containing_bigalloc)
+{
+	assert(containing_bigalloc);
+	assert(containing_bigalloc->suballocator || maybe_the_allocation);
+	struct allocator *a;
+	if (maybe_the_allocation)
+	{
+		a = maybe_the_allocation->allocated_by;
+	} else a = containing_bigalloc->suballocator;
+	return a;
 }
 
 inline
@@ -211,7 +206,30 @@ struct allocator *__liballocs_leaf_allocator_for(const void *obj,
 	 * FIXME: we should really *try* the suballocator and then,
 	 * if ptr actually falls between the cracks, return the 
 	 * bigalloc's allocator. But that makes things slower than
-	 * we want. So we should add a slower call for this. */
+	 * we want. So we should add a slower call for this.
+	 *
+	 * It's possible that the planned 'pageindex top bit' usage could
+	 * avoid any slowdown here. If the top bit is set, it means there
+	 * is nothing in the page (any part of the page, i.e. it may *begin*
+	 * on a previous page) that is not common-case, i.e. not allocated by
+	 * the suballocator of this bigalloc (if there is one; otherwise
+	 * it means it is all part of this exact bigalloc?).
+	 *
+	 * How does this 'top bit' thing work in the case of, say, a
+	 * malloc arena? When the arena is allocated, we set the top
+	 * bits for all pages except perhaps the end ones if it's not
+	 * page-aligned. We clear some of them if we, sya, promote a
+	 * malloc chunk to a bigalloc; its begin and end pages might need
+	 * their bits cleared. But its fully-contained pages would be
+	 * fine to keep their bits. DOES THIS WORK? It means that even
+	 * for an empty arena, the malloc is 'the leaf allocator' for
+	 * all addresses in the range, even if there is nothing allocated
+	 * at a queried address. Is that the semantics we want? Depends
+	 * a bit on our callers, i.e. who wants to know about leaf allocators
+	 * and why. libcrunch is one. It doesn't want to know about the arena,
+	 * only about stuff in it, so 'yes it's the leaf; nothing here' would
+	 * indeed be the correct response here.
+	 */
 	
 	if (__builtin_expect(!deepest, 0)) return NULL;
 	if (out_bigalloc) *out_bigalloc = deepest;
