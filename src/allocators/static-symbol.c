@@ -289,10 +289,11 @@ static liballocs_err_t get_info(void *obj, struct big_allocation *maybe_bigalloc
 	struct big_allocation *segment_bigalloc
 	 = (b->allocated_by == &__static_section_allocator) ? b->parent
 			: b;
-	struct segment_metadata *segment = segment_bigalloc->allocator_private;
 
-	uintptr_t obj_addr = (uintptr_t) obj;
+	struct segment_metadata *segment = segment_bigalloc->allocator_private;
 	struct allocs_file_metadata *file = segment_bigalloc->parent->allocator_private;
+	if (!segment->metavector || !file->m.l) goto fail; // No link map or metavector then fail
+	uintptr_t obj_addr = (uintptr_t) obj;
 	uintptr_t file_load_addr = file->m.l->l_addr;
 	/* Do a binary search in the metavector,
 	 * for the highest-placed symbol starting <=
