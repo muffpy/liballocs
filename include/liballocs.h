@@ -178,7 +178,7 @@ liballocs_err_t extract_and_output_alloc_site_and_type(
     struct insert *p_ins,
     struct uniqtype **out_type,
     void **out_site
-) __attribute__((visibility("hidden")));
+);
 
 
 /* We define a dladdr that caches stuff. */
@@ -777,6 +777,14 @@ static inline int __liballocs_walk_stack(int (*cb)(void *, void *, void *, void 
 		// try to get the bp, but no problem if we don't
 		unw_ret = unw_get_reg(&cursor, UNW_TDEP_BP, &bp); 
 		_Bool got_higherframe_bp __attribute__((unused)) = 0;
+
+		char sym[256]; unw_word_t offset;
+		printf("0x%lx:", ip);
+		if (unw_get_proc_name(&cursor, sym, sizeof(sym), &offset) == 0) {
+			printf(" (%s+0x%lx)\n", sym, offset);
+		} else {
+			printf(" -- error: unable to obtain symbol name for this frame\n");
+		}
 		
 		ret = cb((void*) ip, (void*) sp, (void*) bp, arg);
 		if (ret) return ret;
