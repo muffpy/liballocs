@@ -47,6 +47,31 @@ struct __liballocs_memrange_cache __liballocs_ool_cache; // all zeroes
 _Bool __liballocs_is_initialized;
 
 struct big_allocation;
+liballocs_err_t __generic_heap_get_info(void * obj, struct big_allocation *b, 
+	struct uniqtype **out_type, void **out_base, 
+	unsigned long *out_size, const void **out_site){
+		return NULL;
+}
+liballocs_err_t extract_and_output_alloc_site_and_type(
+    struct insert *p_ins,
+    struct uniqtype **out_type,
+    void **out_site
+){
+	return NULL;
+}
+struct frame_uniqtype_and_offset pc_to_frame_uniqtype(const void *addr)
+{
+	return;
+}
+int __liballocs_debug_level;
+void build_adjacency_list_recursive(
+	__uniqtype_node_rec **p_adj_u_head, __uniqtype_node_rec **p_adj_u_tail, 
+	void *obj_start, struct uniqtype *obj_t, 
+	unsigned long start_offset, struct uniqtype *t_at_offset, 
+	follow_ptr_fn *follow_ptr, void *fp_arg){
+		
+}
+__uniqtype_node_rec; 
 struct allocator __static_file_allocator;
 uint16_t *pageindex __attribute__((visibility("protected")));
 
@@ -174,6 +199,7 @@ struct allocator __stack_allocator;
 struct allocator __stackframe_allocator;
 struct allocator __mmap_allocator; /* mmaps */
 struct allocator __sbrk_allocator; /* sbrk() */
+struct allocator __brk_allocator; /* sbrk() */
 struct allocator __static_allocator; /* ldso; nests under file? */
 struct allocator __auxv_allocator; /* nests under stack? */
 struct allocator __alloca_allocator; /* nests under stack? */
@@ -260,6 +286,9 @@ struct big_allocation *__lookup_bigalloc_under(const void *mem, struct allocator
 	return NULL;
 }
 struct big_allocation *__lookup_bigalloc_top_level(const void *mem) {
+	return NULL;
+}
+struct big_allocation *__lookup_bigalloc_from_root_by_suballocator(const void *mem, struct allocator *sub_a, void **out_object_start) {
 	return NULL;
 }
 
