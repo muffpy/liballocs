@@ -35,8 +35,8 @@ static void *main_bp; // beginning of main's stack frame
 
 struct suballocated_chunk_rec; // FIXME: remove once heap_index has been refactored
 
-static struct frame_uniqtype_and_offset
-pc_to_frame_uniqtype(const void *addr);
+// static struct frame_uniqtype_and_offset
+// pc_to_frame_uniqtype(const void *addr);
 
 void ( __attribute__((constructor(101))) __stackframe_allocator_init)(void)
 {
@@ -369,34 +369,5 @@ void init_frames_info(struct allocs_file_metadata *file)
 	}
 }
 
-static struct frame_uniqtype_and_offset
-pc_to_frame_uniqtype(const void *addr)
-{
-	/* First find the file. */
-	struct big_allocation *file_b = __lookup_bigalloc_from_root(addr,
-		&__static_file_allocator, NULL);
-	if (!file_b) goto fail;
-	/* Now get its frame info. */
-	struct allocs_file_metadata *afile
-	 = (struct allocs_file_metadata *) file_b->allocator_private;
-	assert(afile);
-	if (!afile->frames_info) goto fail;
-	uintptr_t target_vaddr = (uintptr_t) addr - afile->m.l->l_addr;
-#define proj(p) ((p)->entry.allocsite_vaddr)
-	struct frame_allocsite_entry *found = bsearch_leq_generic(
-		struct frame_allocsite_entry, target_vaddr,
-		/*  T*  */ afile->frames_info, /* unsigned */ afile->nframes,
-		proj);
-#undef proj
-	if (found)
-	{
-		return (struct frame_uniqtype_and_offset) {
-			found->entry.uniqtype,
-			found->offset_from_frame_base
-		};
-	}
-fail:
-	return (struct frame_uniqtype_and_offset) { NULL, 0 };
-}
 #undef maximum_vaddr_range_size
 #undef BEGINNING_OF_STACK

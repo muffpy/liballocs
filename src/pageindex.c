@@ -975,7 +975,7 @@ struct big_allocation *__lookup_bigalloc_from_root(const void *mem, struct alloc
 	return b;
 }
 
-__attribute__((visibility("protected")))
+// __attribute__((visibility("protected")))
 struct big_allocation *__lookup_bigalloc_from_root_by_suballocator(const void *mem, struct allocator *sub_a, void **out_object_start)
 {
 	if (!pageindex) __pageindex_init();
@@ -987,8 +987,6 @@ struct big_allocation *__lookup_bigalloc_from_root_by_suballocator(const void *m
 	return b;
 }
 
-// __attribute__((visibility("hidden")))
-// __attribute__((visibility("protected")))
 struct big_allocation *__lookup_bigalloc_top_level(const void *mem)
 {
 	if (!pageindex) __pageindex_init();
@@ -1061,4 +1059,34 @@ _Bool __liballocs_notify_unindexed_address(const void *ptr)
 	if (ret) return 1;
 	// FIXME: loop through the others
 	return 0;
+}
+
+struct frame_uniqtype_and_offset
+pc_to_frame_uniqtype(const void *addr)
+{
+	/* First find the file. */
+	struct big_allocation *file_b = __lookup_bigalloc_from_root(addr,
+		&__static_file_allocator, NULL);
+	if (!file_b) goto fail;
+	/* Now get its frame info. */
+	struct allocs_file_metadata *afile
+	 = (struct allocs_file_metadata *) file_b->allocator_private;
+	assert(afile);
+	if (!afile->frames_info) goto fail;
+	uintptr_t target_vaddr = (uintptr_t) addr - afile->m.l->l_addr;
+#define proj(p) ((p)->entry.allocsite_vaddr)
+	struct frame_allocsite_entry *found = bsearch_leq_generic(
+		struct frame_allocsite_entry, target_vaddr,
+		/*  T*  */ afile->frames_info, /* unsigned */ afile->nframes,
+		proj);
+#undef proj
+	if (found)
+	{
+		return (struct frame_uniqtype_and_offset) {
+			found->entry.uniqtype,
+			found->offset_from_frame_base
+		};
+	}
+fail:
+	return (struct frame_uniqtype_and_offset) { NULL, 0 };
 }
