@@ -72,8 +72,8 @@ void ( __attribute__((constructor(102))) __static_file_allocator_init)(void)
 		 * they do our metadata stuff too. Can we? YES, our __static_file_allocator_notify_load
 		 * is simply __wrap___runt_files_notify_load().  */
 		/* For all loaded objects... */
-		// if (__liballocs_debug_level >= 10)
-		// {
+		if (__liballocs_debug_level >= 10)
+		{
 			for (struct link_map *l = _r_debug.r_map; l; l = l->l_next)
 			{
 				/* l_addr isn't guaranteed to be mapped, so use _DYNAMIC a.k.a. l_ld'*/
@@ -105,49 +105,11 @@ void ( __attribute__((constructor(102))) __static_file_allocator_init)(void)
 #endif
 				}
 			}
-		// }
+		}
 		initialized = 1;
 		trying_to_initialize = 0;
 	}
 }
-
-void __debug_static_files(void) {
-	if (__liballocs_debug_level >= 10)
-		{
-			for (struct link_map *l = _r_debug.r_map; l; l = l->l_next)
-			{
-				/* l_addr isn't guaranteed to be mapped, so use _DYNAMIC a.k.a. l_ld'*/
-				void *query_addr = l->l_ld;
-				struct big_allocation *containing_mapping =__lookup_bigalloc_top_level(query_addr);
-				struct big_allocation *containing_file = __lookup_bigalloc_under(
-					query_addr, &__static_file_allocator, containing_mapping, NULL);
-				assert(containing_file);
-				struct allocs_file_metadata *afile =
-						 containing_file->meta.un.opaque_data.data_ptr;	
-				for (unsigned i_seg = 0; i_seg < afile->m.nload; ++i_seg)
-				{
-					union sym_or_reloc_rec *metavector = afile->m.segments[i_seg].metavector;
-					size_t metavector_size = afile->m.segments[i_seg].metavector_size;
-#if 1 /* librunt doesn't do this */
-					// we print the whole metavector
-					for (unsigned i = 0; i < metavector_size / sizeof *metavector; ++i)
-					{
-						fprintf(get_stream_err(), "At %016lx there is a static alloc of kind %u, idx %08u, type %s\n",
-							afile->m.l->l_addr + vaddr_from_rec(&metavector[i], afile),
-							(unsigned) (metavector[i].is_reloc ? REC_RELOC : metavector[i].sym.kind),
-							(unsigned) (metavector[i].is_reloc ? 0 : metavector[i].sym.idx),
-							UNIQTYPE_NAME(
-								metavector[i].is_reloc ? NULL :
-								(struct uniqtype *)(((uintptr_t) metavector[i].sym.uniqtype_ptr_bits_no_lowbits)<<3)
-							)
-						);
-					}
-#endif
-				}
-			}
-		}
-}
-
 
 // we define this a bit closer to the allocating code, but declare it now
 static void free_file_metadata(void *afm);
