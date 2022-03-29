@@ -120,6 +120,12 @@ struct big_allocation *__lookup_bigalloc_from_root(const void *mem, struct alloc
 struct big_allocation *__lookup_bigalloc_from_root_by_suballocator(const void *mem, struct allocator *sub_a, void **out_object_start);
 struct big_allocation *__lookup_bigalloc_top_level(const void *mem);
 struct big_allocation *__lookup_deepest_bigalloc(const void *mem) __attribute__((visibility("hidden")));
+struct frame_uniqtype_and_offset pc_to_frame_uniqtype(const void *addr);
+struct frame_uniqtype_and_offset
+{
+	struct uniqtype *u;
+	unsigned o;
+};
 
 struct allocator *__liballocs_get_allocator_upper_bound(const void *obj) __attribute__((visibility("protected")));
 struct allocator *__liballocs_ool_get_allocator(const void *obj) __attribute__((visibility("protected")));
