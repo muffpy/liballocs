@@ -23,11 +23,11 @@ const char *debugging_output_filename = DEBUGGING_OUTPUT_FILENAME;
 
 typedef __uniqtype_node_rec node_rec;
 
-static void build_adjacency_list_recursive(
-	node_rec **p_adj_u_head, node_rec **p_adj_u_tail, 
-	void *obj_start, struct uniqtype *obj_t, 
-	unsigned long start_offset, struct uniqtype *t_at_offset, 
-	follow_ptr_fn *follow_ptr, void *fp_arg);
+// static void build_adjacency_list_recursive(
+// 	node_rec **p_adj_u_head, node_rec **p_adj_u_tail, 
+// 	void *obj_start, struct uniqtype *obj_t, 
+// 	unsigned long start_offset, struct uniqtype *t_at_offset, 
+// 	follow_ptr_fn *follow_ptr, void *fp_arg);
 
 enum node_colour { WHITE, GREY, BLACK }; // WHITE == 0, so "absent" pair->v 0 means WHITE
 
@@ -138,9 +138,9 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 				to_enqueue = make_node(ptr, t);
 				__uniqtype_node_queue_push_tail(p_adj_u_head, p_adj_u_tail, to_enqueue);
 
-				DEBUG_GUARD(fprintf(debug_out, "\t%s_at_%p -> %s_at_%p;\n",
+				printf("\t%s_at_%p -> %s_at_%p;\n",
 					NAME_FOR_UNIQTYPE(obj_t), obj_start,
-					NAME_FOR_UNIQTYPE(to_enqueue->t), to_enqueue->obj));
+					NAME_FOR_UNIQTYPE(to_enqueue->t), to_enqueue->obj);
 			}
 		}
 		else if (!pointed_to_object || pointed_to_object == (void*) -1)
@@ -149,14 +149,14 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 		}
 		else
 		{
-			fprintf(stderr, "Warning: insane pointer value %p found in field index %d in object %p, type %s\n",
+			printf("Warning: insane pointer value %p found in field index %d in object %p, type %s\n",
 				pointed_to_object,
 				i,
 				(char*)((uintptr_t) obj_start + start_offset),
 				NAME_FOR_UNIQTYPE(t_at_offset)
 			);
 		}
-		if (to_enqueue && to_enqueue->obj) fprintf(stderr, "Found a pointed-to object at %p, statically of type %s, "
+		if (to_enqueue && to_enqueue->obj) printf("Found a pointed-to object at %p, statically of type %s, "
 			"added as %p of type %s\n",
 			pointed_to_object, NAME_FOR_UNIQTYPE(pointed_to_static_t),
 			to_enqueue->obj, NAME_FOR_UNIQTYPE(to_enqueue->t));
@@ -174,7 +174,7 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 /* This function builds an adjacency list for the current node, by adding
  * *all* nodes, not just (despite the name) those pointed to by subobjects.
  * i.e. the top-level object is a zero-degree subobject. */
-static void build_adjacency_list_recursive(
+void build_adjacency_list_recursive(
 	node_rec **p_adj_u_head, node_rec **p_adj_u_tail, 
 	void *obj_start, struct uniqtype *obj_t, 
 	unsigned long start_offset, struct uniqtype *t_at_offset, 
@@ -184,7 +184,7 @@ static void build_adjacency_list_recursive(
 
 	assert(!t_at_offset->make_precise);
 	
-	fprintf(stderr, "Descending through subobjects of object at %p, "
+	printf("Descending through subobjects of object at %p, "
 		"currently at subobject offset %ld of type %s\n",
 		obj_start, start_offset, NAME_FOR_UNIQTYPE(t_at_offset));
 	

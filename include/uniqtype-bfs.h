@@ -61,5 +61,9 @@ void __uniqtype_process_bfs_queue(
 	follow_ptr_fn *follow_ptr, void *fp_arg,
 	on_blacken_fn *on_blacken, void *ob_arg);
 
-
+void build_adjacency_list_recursive(
+	__uniqtype_node_rec **p_adj_u_head, __uniqtype_node_rec **p_adj_u_tail, 
+	void *obj_start, struct uniqtype *obj_t, 
+	unsigned long start_offset, struct uniqtype *t_at_offset, 
+	follow_ptr_fn *follow_ptr, void *fp_arg);
 #endif
