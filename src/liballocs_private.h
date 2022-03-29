@@ -138,11 +138,6 @@ struct addrlist
 	unsigned allocsz;
 	void **addrs;
 };
-struct frame_uniqtype_and_offset
-{
-	struct uniqtype *u;
-	unsigned o;
-};
 
 #define META_OBJ_SUFFIX "-meta.so"
 _Bool is_meta_object_for_lib(struct link_map *maybe_types, struct link_map *l);
