@@ -132,7 +132,6 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 			/* make a node and put it in the adjacency list */
 			void *ptr = pointed_to_object;
 			struct uniqtype *t = pointed_to_static_t;
-			follow_ptr(&ptr, &t, fp_arg);
 			if (ptr)
 			{
 				to_enqueue = make_node(ptr, t);
@@ -142,6 +141,7 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 					NAME_FOR_UNIQTYPE(obj_t), obj_start,
 					NAME_FOR_UNIQTYPE(to_enqueue->t), to_enqueue->obj);
 			}
+			follow_ptr(&ptr, &t, fp_arg);
 		}
 		else if (!pointed_to_object || pointed_to_object == (void*) -1)
 		{
