@@ -362,6 +362,7 @@ static void bitmap_insert(struct big_allocation *arena, void *new_userchunkaddr,
 	/* Populate our extra in-chunk fields */
 	p_insert->alloc_site_flag = 0U;
 	p_insert->alloc_site = (uintptr_t) caller;
+	p_insert->un.bits = 0; /* To use for mark-and-sweep */
 
 #if 0 // def PRECISE_REQUESTED_ALLOCSIZE
 	/* FIXME: this isn't really the insert size. It's the insert plus padding.
@@ -486,10 +487,8 @@ static void bitmap_delete(struct big_allocation *arena, void *userptr/*, size_t 
 	{
 		void *allocptr = userptr;
 		unsigned long size = malloc_usable_size(allocptr);
-#ifdef TRACE_HEAP_INDEX
-		fprintf(stderr, "*** Unindexing bigalloc entry for alloc chunk %p (size %lu)\n", 
+		printf("*** Unindexing bigalloc entry for alloc chunk %p (size %lu)\n", 
 				allocptr, size);
-#endif
 		__liballocs_delete_bigalloc_at(userptr, &__generic_malloc_allocator);
 #ifdef TRACE_HEAP_INDEX
 		*next_recently_freed_to_replace = userptr;
@@ -507,13 +506,10 @@ static void bitmap_delete(struct big_allocation *arena, void *userptr/*, size_t 
 	/* The address *must* be in our tracked range. Assert this. */
 	assert(info->bitmap_base_addr == ROUND_DOWN_PTR(arena->begin, MALLOC_ALIGN*BITMAP_WORD_NBITS));
 	assert((uintptr_t) userptr >= (uintptr_t) info->bitmap_base_addr);
-	bitmap_clear_l(bitmap, ((uintptr_t) userptr - (uintptr_t) info->bitmap_base_addr) / 
-			(MALLOC_ALIGN * BITMAP_WORD_NBITS));
+	bitmap_clear_l(bitmap, ((uintptr_t) userptr - (uintptr_t) info->bitmap_base_addr) / MALLOC_ALIGN);
 
-#ifdef TRACE_HEAP_INDEX
-	fprintf(stderr, "*** Deleting entry for chunk %p, from bitmap at %p\n", 
-		userptr, bitmap);
-#endif
+	// printf("*** Deleting entry for chunk %p, from bitmap at %p\n \n", 
+	// 	userptr, bitmap);
 
 	/* (old comment; still true?) FIXME: we need a big lock around realloc()
 	 * to avoid concurrent in-place realloc()s messing with the other inserts we access. */
@@ -1047,6 +1043,7 @@ liballocs_err_t __generic_heap_set_type(struct big_allocation *maybe_the_allocat
 	if (!ins) return &__liballocs_err_unindexed_heap_object;
 	ins->alloc_site = (uintptr_t) new_type;
 	ins->alloc_site_flag = 1; // meaning it's a type, not a site
+	ins->un.bits = 0;
 	return NULL;
 }
 
