@@ -1003,7 +1003,6 @@ struct big_allocation *__lookup_bigalloc_top_level(const void *mem)
 	return b;
 }
 
-__attribute__((visibility("hidden")))
 struct big_allocation *__lookup_deepest_bigalloc(const void *mem)
 {
 	if (!pageindex) __pageindex_init();

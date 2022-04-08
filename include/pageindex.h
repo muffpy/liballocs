@@ -119,7 +119,7 @@ struct big_allocation *__lookup_bigalloc_under_by_suballocator(const void *mem, 
 struct big_allocation *__lookup_bigalloc_from_root(const void *mem, struct allocator *a, void **out_object_start);
 struct big_allocation *__lookup_bigalloc_from_root_by_suballocator(const void *mem, struct allocator *sub_a, void **out_object_start);
 struct big_allocation *__lookup_bigalloc_top_level(const void *mem);
-struct big_allocation *__lookup_deepest_bigalloc(const void *mem) __attribute__((visibility("hidden")));
+struct big_allocation *__lookup_deepest_bigalloc(const void *mem);
 struct frame_uniqtype_and_offset pc_to_frame_uniqtype(const void *addr);
 struct frame_uniqtype_and_offset
 {
