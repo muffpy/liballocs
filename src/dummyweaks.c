@@ -72,6 +72,10 @@ void build_adjacency_list_recursive(
 		
 }
 __uniqtype_node_rec; 
+void __liballocs_bitmap_delete(struct big_allocation *arena, void *userptr/*, size_t freed_usable_size*/)
+{
+	return;
+}
 struct allocator __static_file_allocator;
 uint16_t *pageindex __attribute__((visibility("protected")));
 
@@ -289,6 +293,9 @@ struct big_allocation *__lookup_bigalloc_top_level(const void *mem) {
 	return NULL;
 }
 struct big_allocation *__lookup_bigalloc_from_root_by_suballocator(const void *mem, struct allocator *sub_a, void **out_object_start) {
+	return NULL;
+}
+struct big_allocation *__lookup_deepest_bigalloc(const void *mem) {
 	return NULL;
 }
 
