@@ -709,10 +709,10 @@ class AllocsCompilerWrapper(CompilerWrapper):
             ret, extraFinalLinkArgs = self.fixupLinkedRelocObject(relocFilename, None)
             if ret != 0:
                 return ret
-            finalItemsAndOpts = self.flatOptions(opts) + [x for x in thisLinkOutputOptions] \
+            finalItemsAndOpts = extraFinalLinkArgs + self.flatOptions(opts) + [x for x in thisLinkOutputOptions] \
               + ["-o", finalLinkOutput] \
               + [relocFilename] + linkItemsDeferred \
-              + finalLinkArgs + extraFinalLinkArgs
+              + finalLinkArgs
         else:
             finalItemsAndOpts = self.flatOptions(self.phaseOptions[Phase.LINK]) + \
                 self.flatItems(self.itemsForPhases({Phase.LINK}))
