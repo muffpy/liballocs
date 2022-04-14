@@ -710,9 +710,9 @@ class AllocsCompilerWrapper(CompilerWrapper):
             if ret != 0:
                 return ret
             finalItemsAndOpts = self.flatOptions(opts) + [x for x in thisLinkOutputOptions] \
+              + finalLinkArgs + extraFinalLinkArgs \
               + ["-o", finalLinkOutput] \
-              + [relocFilename] + linkItemsDeferred \
-              + finalLinkArgs + extraFinalLinkArgs
+              + [relocFilename] + linkItemsDeferred
         else:
             finalItemsAndOpts = self.flatOptions(self.phaseOptions[Phase.LINK]) + \
                 self.flatItems(self.itemsForPhases({Phase.LINK}))

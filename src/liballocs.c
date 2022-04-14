@@ -1301,7 +1301,7 @@ liballocs_err_t extract_and_output_alloc_site_and_type(
 		uintptr_t alloc_site_addr = p_ins->alloc_site;
 		void *alloc_site = (void*) alloc_site_addr;
 		if (out_site) *out_site = alloc_site;
-		struct allocsite_entry *entry = __liballocs_find_allocsite_entry_at(alloc_site);
+		struct allocsite_entry *entry = alloc_site ? __liballocs_find_allocsite_entry_at(alloc_site) : NULL;
 		alloc_uniqtype = entry ? entry->uniqtype : NULL;
 		/* Remember the unrecog'd alloc sites we see. */
 		if (!alloc_uniqtype && alloc_site && 
@@ -1323,7 +1323,7 @@ liballocs_err_t extract_and_output_alloc_site_and_type(
 		 * okay because there will be very few of them. We don't want to do
 		 * a binary search on the table proper. But that's okay. We get
 		 * everything we need. */
-		allocsite_id_t allocsite_id = __liballocs_allocsite_id((const void *) alloc_site_addr);
+		allocsite_id_t allocsite_id = alloc_site_addr ? __liballocs_allocsite_id((const void *) alloc_site_addr) : (allocsite_id_t) -1;
 		if (allocsite_id != (allocsite_id_t) -1)
 		{
 			// what to do with the id?? We have no spare bits...
