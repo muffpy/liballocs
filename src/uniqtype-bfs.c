@@ -137,9 +137,9 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 				to_enqueue = make_node(ptr, t);
 				__uniqtype_node_queue_push_tail(p_adj_u_head, p_adj_u_tail, to_enqueue);
 
-				printf("\t%s_at_%p -> %s_at_%p;\n",
-					NAME_FOR_UNIQTYPE(obj_t), obj_start,
-					NAME_FOR_UNIQTYPE(to_enqueue->t), to_enqueue->obj);
+				// fprintf(stderr, "\t%s_at_%p -> %s_at_%p;\n",
+				// 	NAME_FOR_UNIQTYPE(obj_t), obj_start,
+				// 	NAME_FOR_UNIQTYPE(to_enqueue->t), to_enqueue->obj);
 			}
 			follow_ptr(&ptr, &t, fp_arg);
 		}
@@ -149,17 +149,17 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 		}
 		else
 		{
-			printf("Warning: insane pointer value %p found in field index %d in object %p, type %s\n",
-				pointed_to_object,
-				i,
-				(char*)((uintptr_t) obj_start + start_offset),
-				NAME_FOR_UNIQTYPE(t_at_offset)
-			);
+			// fprintf(stderr, "Warning: insane pointer value %p found in field index %d in object %p, type %s\n",
+			// 	pointed_to_object,
+			// 	i,
+			// 	(char*)((uintptr_t) obj_start + start_offset),
+			// 	NAME_FOR_UNIQTYPE(t_at_offset)
+			// );
 		}
-		if (to_enqueue && to_enqueue->obj) printf("Found a pointed-to object at %p, statically of type %s, "
-			"added as %p of type %s\n",
-			pointed_to_object, NAME_FOR_UNIQTYPE(pointed_to_static_t),
-			to_enqueue->obj, NAME_FOR_UNIQTYPE(to_enqueue->t));
+		// if (to_enqueue && to_enqueue->obj) fprintf(stderr,"Found a pointed-to object at %p, statically of type %s, "
+		// 	"added as %p of type %s\n",
+		// 	pointed_to_object, NAME_FOR_UNIQTYPE(pointed_to_static_t),
+		// 	to_enqueue->obj, NAME_FOR_UNIQTYPE(to_enqueue->t));
 	}
 	else if (UNIQTYPE_IS_COMPOSITE_TYPE(element_type)) /* Else is it a thing with structure? If so, recurse. */
 	{
@@ -184,9 +184,9 @@ void build_adjacency_list_recursive(
 
 	assert(!t_at_offset->make_precise);
 	
-	printf("Descending through subobjects of object at %p, "
-		"currently at subobject offset %ld of type %s\n",
-		obj_start, start_offset, NAME_FOR_UNIQTYPE(t_at_offset));
+	// fprintf(stderr, "Descending through subobjects of object at %p, "
+	// 	"currently at subobject offset %ld of type %s\n",
+	// 	obj_start, start_offset, NAME_FOR_UNIQTYPE(t_at_offset));
 	
 	// If someone tries to walk_bfs from a function pointer, we will try to
 	// bootstrap the list from a queue consisting of a single object (the function)
