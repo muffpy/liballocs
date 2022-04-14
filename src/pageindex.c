@@ -198,6 +198,74 @@ void (__attribute__((constructor(101))) __pageindex_init)(void)
 			(void*) (MAXIMUM_USER_ADDRESS + 1), (const void *) 0x410000000000ul);
 		if (pageindex == MAP_FAILED) abort();
 		debug_printf(3, "pageindex at %p\n", pageindex);
+
+		/* For now, make our heap region quite large, but not so large that
+		 * we wouldn't want it in our pageindex. FIXME: We want to downscale
+		 * this by defining *two* private mallocs: one for stuff that is
+		 * O(nbigallocs) and one for stuff that is O(usedmem). The theory
+		 * is that only the nbigallocs one needs to have a 'no-mmap' property. */
+		size_t heapsz = 1*1024*1024*1024ul;
+		/* 1GB is 256K pages, or 512kB of shorts in the pageindex. It's still too
+		 * much, but fine for now. */
+		int prot = PROT_READ|PROT_WRITE;
+		int flags = MAP_ANONYMOUS|MAP_NORESERVE|MAP_PRIVATE;
+		__private_malloc_heap_base = mmap(NULL, heapsz, prot, flags, -1, 0);
+	mmap_return_site:
+		if (MMAP_RETURN_IS_ERROR(__private_malloc_heap_base)) abort();
+		__private_malloc_heap_limit = (void*)((uintptr_t) __private_malloc_heap_base
+			+ heapsz);
+		/* It's just a mapping sequence, init. */
+		static struct mapping_sequence seq;
+		seq = (struct mapping_sequence) {
+			.begin = __private_malloc_heap_base,
+			.end =  __private_malloc_heap_limit,
+			.filename = NULL,
+			.nused = 1,
+			.mappings = { [0] = (struct mapping_entry) {
+				.begin = __private_malloc_heap_base,
+				.end = __private_malloc_heap_limit,
+				.prot = prot,
+				.flags = flags & ~MAP_NORESERVE,
+				.offset = 0,
+				.is_anon = 1,
+				.caller = /* &&mmap_return_site */ 0
+			} }
+		};
+		struct big_allocation *b = __add_mapping_sequence_bigalloc_nocopy(&seq);
+		/* What about the bitmap? 1GB of 16B regions is 64Mbits or 8Mbytes.
+		 * We don't want to spend that much up-front. But we don't have to!
+		 * We allocate the bitmap in our own heap, which is MAP_NORESERVE. */
+		b->suballocator = &__private_malloc_allocator;
+		size_t range_size_bytes = (uintptr_t) b->end - (uintptr_t) b->begin;
+		size_t bitmap_alloc_size_bytes = DIVIDE_ROUNDING_UP(
+			DIVIDE_ROUNDING_UP(range_size_bytes, PRIVATE_MALLOC_ALIGN),
+			8) + sizeof (struct insert);
+		/* FIXME: also want to create one of these?
+		struct arena_bitmap_info
+		{
+			unsigned long nwords;
+			bitmap_word_t *bitmap;
+			void *bitmap_base_addr;
+		};
+		*/
+		/* we use the real dlmalloc just this once, because we can't set the bit
+		 * before the bitmap is created */
+		void *__real_dlmalloc(size_t size);
+		b->suballocator_private = __real_dlmalloc(bitmap_alloc_size_bytes);
+	dlmalloc_return_site:
+		assert((uintptr_t) b->suballocator_private >= (uintptr_t) __private_malloc_heap_base);
+		assert((uintptr_t) b->suballocator_private + bitmap_alloc_size_bytes
+			< (uintptr_t) __private_malloc_heap_limit);
+		__private_malloc_set_metadata(b->suballocator_private, bitmap_alloc_size_bytes,
+			&&dlmalloc_return_site);
+		// FIXME: this is an interesting case of an unclassifiable allocation site,
+		// by our current 'dumpallocs.ml' classifier. It is sized (syntactically)
+		// in bytes but allocated (semantically) in bitmap_word_t units, and rests
+		// on the assumption that when we scale down a whole number of pages,
+		// we get some whole number of bitmap_word_ts, but we don't care about
+		// the actual number... we care only that we have one bit per
+		// PRIVATE_MALLOC_ALIGN bytes.
+
 	}
 }
 
@@ -1060,6 +1128,7 @@ _Bool __liballocs_notify_unindexed_address(const void *ptr)
 	return 0;
 }
 
+// #include <allocmeta.h>
 struct frame_uniqtype_and_offset
 pc_to_frame_uniqtype(const void *addr)
 {
@@ -1072,6 +1141,8 @@ pc_to_frame_uniqtype(const void *addr)
 	 = (struct allocs_file_metadata *) file_b->allocator_private;
 	assert(afile);
 	if (!afile->frames_info) goto fail;
+#define IS_PLAUSIBLE_POINTER(p) (!(p) || ((p) == (void*) -1) || (((uintptr_t) (p)) >= 4194304 && ((uintptr_t) (p)) < 0x800000000000ul))
+	if (!IS_PLAUSIBLE_POINTER(afile->frames_info) | !IS_PLAUSIBLE_POINTER(afile->m.l)) goto fail;
 	uintptr_t target_vaddr = (uintptr_t) addr - afile->m.l->l_addr;
 #define proj(p) ((p)->entry.allocsite_vaddr)
 	struct frame_allocsite_entry *found = bsearch_leq_generic(
