@@ -147,6 +147,7 @@ static void *emulated_curbrk;
 void *emulated_sbrk(intptr_t increment)
 {
 	if (!emulated_curbrk) emulated_curbrk = __private_malloc_heap_base;
+	void *old_curbrk = emulated_curbrk;
 	if (increment > 0)
 	{
 		// we only return an error if we can't allocate any more at all
@@ -168,5 +169,5 @@ void *emulated_sbrk(intptr_t increment)
 			(void*)((uintptr_t) emulated_curbrk + increment)
 		);
 	}
-	return emulated_curbrk;
+	return old_curbrk;
 }

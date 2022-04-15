@@ -283,7 +283,7 @@ static liballocs_err_t get_info(void *obj, struct big_allocation *maybe_bigalloc
 	maybe_bigalloc = maybe_bigalloc ? maybe_bigalloc : &big_allocations[PAGENUM(obj)];
 	struct big_allocation *b =
 		(maybe_bigalloc->allocated_by == &__static_symbol_allocator) ?
-		maybe_bigalloc : maybe_bigalloc->parent;
+		maybe_bigalloc->parent : maybe_bigalloc;
 	assert(b->allocated_by == &__static_section_allocator
 			|| b->allocated_by == &__static_segment_allocator);
 	struct big_allocation *segment_bigalloc
