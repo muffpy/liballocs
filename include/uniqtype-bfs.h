@@ -45,10 +45,10 @@ static inline _Bool __uniqtype_node_queue_empty(void *q_head)
 	return !q_head;
 }
 
-typedef void follow_ptr_fn(void**, struct uniqtype**, void *);
+typedef void follow_ptr_fn(void**, struct uniqtype**, void**, struct uniqtype**, void *);
 typedef void on_blacken_fn(void *obj, struct uniqtype *t, void *);
 
-void __uniqtype_default_follow_ptr(void**, struct uniqtype**, void *);
+void __uniqtype_default_follow_ptr(void**, struct uniqtype**, void**, struct uniqtype**, void *);
 
 void __uniqtype_walk_bfs_from_object(
 	void *object, struct uniqtype *t,
