@@ -127,6 +127,8 @@ struct frame_uniqtype_and_offset
 	struct uniqtype *u;
 	unsigned o;
 };
+void raw_syscall_write_string(const char* s);
+void raw_syscall_write_ulong(const unsigned long u);
 
 struct allocator *__liballocs_get_allocator_upper_bound(const void *obj) __attribute__((visibility("protected")));
 struct allocator *__liballocs_ool_get_allocator(const void *obj) __attribute__((visibility("protected")));

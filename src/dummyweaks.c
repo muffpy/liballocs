@@ -63,6 +63,9 @@ struct frame_uniqtype_and_offset pc_to_frame_uniqtype(const void *addr)
 {
 	return;
 }
+void raw_syscall_write_string(const char* s) {return;};
+void raw_syscall_write_ulong(const unsigned long u) {return;};
+
 int __liballocs_debug_level;
 void build_adjacency_list_recursive(
 	__uniqtype_node_rec **p_adj_u_head, __uniqtype_node_rec **p_adj_u_tail, 
@@ -247,8 +250,8 @@ int unw_init_local(unw_cursor_t *cursor, unw_context_t *context) { return 0; }
 int unw_getcontext(unw_context_t *ucp) { return 0; }
 int unw_step(unw_cursor_t *cp) { return 0; }
 
-void __uniqtype_default_follow_ptr(void **p_obj, struct uniqtype **p_t, void *arg)
-{ /* no-op */ }
+// void __uniqtype_default_follow_ptr(void **p_obj, struct uniqtype **p_t, void *arg)
+// { /* no-op */ }
 
 void __uniqtype_walk_bfs_from_object(
 	void *object, struct uniqtype *t,

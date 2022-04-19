@@ -9,6 +9,10 @@
 #include "liballocs_private.h"
 #include "raw-syscalls-defs.h"
 
+void raw_syscall_write_string(const char* s) {raw_write(1, s, strlen(s));}
+void raw_syscall_write_ulong(const unsigned long u) {raw_write(1, fmt_hex_num((u)), 18);}
+// void raw_syscall_write_chars(unsigned long *u) {write_ulong(u)};
+
 #ifndef NO_PTHREADS
 #include <pthread.h>
 #define BIG_LOCK \
