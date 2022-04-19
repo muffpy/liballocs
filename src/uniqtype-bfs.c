@@ -94,7 +94,7 @@ static void treemap_delete(void **rootp)
 }
 
 /* HACK: archdep */
-#define IS_PLAUSIBLE_POINTER(p) (!(p) || ((p) == (void*) -1) || (((uintptr_t) (p)) >= 4194304 && ((uintptr_t) (p)) < 0x800000000000ul))
+#define IS_PLAUSIBLE_POINTER(p) ((p) && ((p) != (void*) -1) && (((uintptr_t) (p)) >= 4194304 && ((uintptr_t) (p)) < 0x800000000000ul))
 
 struct adj_list_ctxt
 {
@@ -136,12 +136,13 @@ static void visit_one_subobject(int i, struct uniqtype *element_type, long memb_
 			{
 				to_enqueue = make_node(ptr, t);
 				__uniqtype_node_queue_push_tail(p_adj_u_head, p_adj_u_tail, to_enqueue);
-
-				// fprintf(stderr, "\t%s_at_%p -> %s_at_%p;\n",
-				// 	NAME_FOR_UNIQTYPE(obj_t), obj_start,
-				// 	NAME_FOR_UNIQTYPE(to_enqueue->t), to_enqueue->obj);
+// #ifdef PRINT_STACK_STUFF
+// 				fprintf(stdout, "\t%s_at_%p -> %s_at_%p;\n",
+// 					NAME_FOR_UNIQTYPE(obj_t), obj_start,
+// 					NAME_FOR_UNIQTYPE(to_enqueue->t), to_enqueue->obj);
+// #endif
 			}
-			follow_ptr(&ptr, &t, fp_arg);
+			follow_ptr(&ptr, &t, &obj_start, &obj_t, &fp_arg);
 		}
 		else if (!pointed_to_object || pointed_to_object == (void*) -1)
 		{
@@ -184,7 +185,7 @@ void build_adjacency_list_recursive(
 
 	assert(!t_at_offset->make_precise);
 	
-	// fprintf(stderr, "Descending through subobjects of object at %p, "
+	// fprintf(stdout, "Descending through subobjects of object at %p, "
 	// 	"currently at subobject offset %ld of type %s\n",
 	// 	obj_start, start_offset, NAME_FOR_UNIQTYPE(t_at_offset));
 	
@@ -330,7 +331,8 @@ static node_rec *make_node(void *obj, struct uniqtype *t)
 	return node;
 }
 
-void __uniqtype_default_follow_ptr(void **p_obj, struct uniqtype **p_t, void *arg)
+void __uniqtype_default_follow_ptr(void **p_obj, struct uniqtype **p_t, 
+		void**p_obj_parent, struct uniqtype **p_obj_parent_t, void *arg)
 {
 	/* No-op. */
 }
