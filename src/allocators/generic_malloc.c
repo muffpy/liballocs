@@ -350,7 +350,7 @@ static void bitmap_insert(struct big_allocation *arena, void *new_userchunkaddr,
 	bitmap_word_t *bitmap = info->bitmap;
 
 	/* Sanity checking */
-	sanity_check_bitmap(info);
+	// sanity_check_bitmap(info);
 	
 	/* The address *must* be in our tracked range. Assert this. */
 	assert(info->bitmap_base_addr == ROUND_DOWN_PTR(arena->begin, MALLOC_ALIGN*BITMAP_WORD_NBITS)); // start of coverage (not of bitmap)
@@ -432,7 +432,7 @@ after_promotion:
 	/* Add it to the bitmap.  */
 	bitmap_set_l(bitmap, (new_userchunkaddr - info->bitmap_base_addr) / MALLOC_ALIGN);
 
-	sanity_check_bitmap(info);
+	// sanity_check_bitmap(info);
 
 	BIG_UNLOCK
 }
@@ -525,7 +525,7 @@ static void bitmap_delete(struct big_allocation *arena, void *userptr/*, size_t 
 	struct arena_bitmap_info *info = (struct arena_bitmap_info *) arena->suballocator_private;
 	bitmap_word_t *bitmap = info->bitmap;
 
-	sanity_check_bitmap(info);
+	// sanity_check_bitmap(info);
 
 	/* The address *must* be in our tracked range. Assert this. */
 	assert(info->bitmap_base_addr == ROUND_DOWN_PTR(arena->begin, MALLOC_ALIGN*BITMAP_WORD_NBITS));
@@ -533,7 +533,7 @@ static void bitmap_delete(struct big_allocation *arena, void *userptr/*, size_t 
 	bitmap_clear_l(bitmap, ((uintptr_t) userptr - (uintptr_t) info->bitmap_base_addr) / MALLOC_ALIGN);
 	
 
-	sanity_check_bitmap(info);
+	// sanity_check_bitmap(info);
 	
 	// printf("*** Deleting entry for chunk %p, from bitmap at %p\n \n", 
 	// 	userptr, bitmap);
