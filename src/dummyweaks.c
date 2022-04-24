@@ -74,7 +74,7 @@ void build_adjacency_list_recursive(
 	follow_ptr_fn *follow_ptr, void *fp_arg){
 		
 }
-__uniqtype_node_rec; 
+struct uniqtype *pointer_to___uniqtype__void;
 void __liballocs_bitmap_delete(struct big_allocation *arena, void *userptr/*, size_t freed_usable_size*/)
 {
 	return;
@@ -208,6 +208,8 @@ struct allocator __mmap_allocator; /* mmaps */
 struct allocator __sbrk_allocator; /* sbrk() */
 struct allocator __brk_allocator; /* sbrk() */
 struct allocator __static_allocator; /* ldso; nests under file? */
+struct allocator __static_segment_allocator;
+struct allocator __static_section_allocator;
 struct allocator __auxv_allocator; /* nests under stack? */
 struct allocator __alloca_allocator; /* nests under stack? */
 struct allocator __generic_malloc_allocator; /* covers all chunks */
