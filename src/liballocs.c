@@ -1301,8 +1301,8 @@ liballocs_err_t extract_and_output_alloc_site_and_type(
 		uintptr_t alloc_site_addr = p_ins->alloc_site;
 		void *alloc_site = (void*) alloc_site_addr;
 		if (out_site) *out_site = alloc_site;
-		struct allocsite_entry *entry = alloc_site ? __liballocs_find_allocsite_entry_at(alloc_site) : NULL;
-		alloc_uniqtype = entry ? entry->uniqtype : NULL;
+		struct allocsite_entry *entry = __liballocs_find_allocsite_entry_at(alloc_site);
+		alloc_uniqtype = entry ? entry->uniqtype : NULL; 
 		/* Remember the unrecog'd alloc sites we see. */
 		if (!alloc_uniqtype && alloc_site && 
 				!__liballocs_addrlist_contains(&__liballocs_unrecognised_heap_alloc_sites, alloc_site))
