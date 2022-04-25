@@ -1,3 +1,9 @@
+Builds on top of the [c68472d022dc531b617b615962f4b035cb42f31c](https://github.com/stephenrkell/liballocs/commit/c68472d022dc531b617b615962f4b035cb42f31c) commit from liballocs.
+Mostly making liballocs' symbols visible to end-user by adding them to dummyweaks.c.
+
+------------------------------------------------------------------
+
+
 liballocs is a run-time library and toolchain extension which extends
 Unix-like operating systems (currently GNU/Linux) with a rich run-time
 reflective model.
