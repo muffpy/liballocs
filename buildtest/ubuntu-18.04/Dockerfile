@@ -17,7 +17,7 @@ RUN sudo apt-get install -y git build-essential libelf-dev libdw-dev binutils-de
        make git gawk gdb wget \
        libunwind-dev libc6-dev-i386 zlib1g-dev libc6-dbg \
        libboost-iostreams-dev libboost-regex-dev libboost-serialization-dev libboost-filesystem-dev
-RUN cd /usr/local/src && git clone https://github.com/stephenrkell/liballocs.git
+RUN cd /usr/local/src && git clone https://github.com/muffpy/liballocs.git
 RUN cd /usr/local/src/liballocs && \
    git submodule update --init --recursive && \
    make -C contrib -j4
